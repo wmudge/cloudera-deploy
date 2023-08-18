@@ -39,8 +39,6 @@ Tweak the `config.yml` parameters to your liking. Notably, you should add and/or
 name_prefix:    ex01      # Keep this short (4-7 characters)
 infra_region:   us-east-2 # CSP region for infra
 
-aws_key_pair: example-keypair # pre-existing keypair
-
 deployment_template: public # Specify the deployment pattern below. Options are public, semi-private or private
 ```
 
@@ -48,9 +46,7 @@ NOTE: You can override these parameters with any typical Ansible _extra variable
 
 ### SSH Keys
 
-TODO: What should be do with this? Options: create key and AWS keypairs with TF; require pre-existing keypair
-
-This definition will create a new SSH keypair on the host in your `~/.ssh` directory if you do not specify a SSH public key.  If you wish to use an existing SSH key already loaded into AWS, set `public_key_id` to the key's label. If you wish to use an existing SSH key, but need to have it loaded into AWS, then set `public_key_file` to the key's path.
+This definition will create a new SSH keypair on the host of the name `<name_prefix>-ssh-key.{pem,pub}`. This is stored in the `./pbc_infra_tf` directory. A AWS Keypair will be created using the generated public key.
 
 ## Execute
 

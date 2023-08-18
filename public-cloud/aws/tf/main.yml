@@ -27,7 +27,7 @@
             dest: "pbc_infra_tf/terraform.tfvars"
 
         - name: Terraform apply to set up the Cloud infrastructure
-          # cloud.terraform.terraform:
+          # cloud.terraform.terraform: # NOTE: When use this get error similar to https://github.com/ansible-collections/cloud.terraform/issues/86
           community.general.terraform:
             project_path: "pbc_infra_tf/"
             state: "present"
@@ -36,16 +36,13 @@
 
     - name: Set up CDP Public Cloud (Env and DL example)
       block:
-        - name: Use the lookup plugin to view the TF output (one of several ways of getting at the output)
-          ansible.builtin.debug:
-            msg: "{{ lookup('cloud.terraform.tf_output', project_path='pbc_infra_tf/') }}" 
-
         - name: Create TF input variables file for CDP deploy module
           ansible.builtin.template:
             src: cdp_aws_deploy.tfvars.j2
             dest: "pbc_deploy_tf/terraform.tfvars"
           vars:
             infra_type: "aws"
+            aws_key_pair: "{{ lookup('cloud.terraform.tf_output', 'aws_key_name', project_path='pbc_infra_tf/') }}"
             aws_vpc_id: "{{ lookup('cloud.terraform.tf_output', 'aws_vpc_id', project_path='pbc_infra_tf/') }}"
             aws_public_subnet_ids: "{{ lookup('cloud.terraform.tf_output', 'aws_public_subnet_ids', project_path='pbc_infra_tf/') }}"
             aws_private_subnet_ids: "{{ lookup('cloud.terraform.tf_output', 'aws_private_subnet_ids', project_path='pbc_infra_tf/') }}"
@@ -65,7 +62,7 @@
             aws_idbroker_instance_profile_arn: "{{ lookup('cloud.terraform.tf_output', 'aws_idbroker_instance_profile_arn', project_path='pbc_infra_tf/') }}"
 
         - name: Terraform apply to set up CDP (may take up to 1 hour to complete)
-          # cloud.terraform.terraform:
+          # cloud.terraform.terraform: # NOTE: When use this get error similar to https://github.com/ansible-collections/cloud.terraform/issues/86
           community.general.terraform:
             project_path: "pbc_deploy_tf/"
             state: "present"

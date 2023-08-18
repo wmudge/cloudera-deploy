@@ -2,8 +2,6 @@
 name_prefix: "<ENTER_VALUE>" # You must specify a name prefix
 
 infra_region: eu-west-1 # CSP region for infra
-aws_key_pair: "<ENTER_VALUE>" # You must specify a pre-existing AWS keypair
-
 
 deployment_template: semi-private  # Specify the deployment pattern below. Options are public, semi-private or private
 

@@ -1,3 +1,7 @@
+output "aws_key_name" {
+  value = aws_key_pair.cdp_keypair.key_name
+}
+
 output "aws_vpc_id" {
   value = module.cdp_aws_prereqs.aws_vpc_id
 }
