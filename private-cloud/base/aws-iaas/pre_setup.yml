@@ -130,6 +130,12 @@
         ipaadmin_principal: "{{ freeipa.ipaadmin_user | default(lookup('ansible.builtin.env', 'IPA_USER', default=omit)) }}"
         enable_dns: yes  
 
+    - name: Update SSSD to enable Kerberos file ticket caching
+      ansible.builtin.import_role:
+        name: krb_file_ticket_cache
+      vars:
+        sssd_domain: "{{ domain }}"
+        
 - name: Establish supporting services resources
   hosts: deployment
   gather_facts: no
