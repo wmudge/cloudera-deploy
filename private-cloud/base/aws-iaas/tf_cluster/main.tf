@@ -1,4 +1,4 @@
-# Copyright 2023 Cloudera, Inc.
+# Copyright 2024 Cloudera, Inc.
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -105,19 +105,28 @@ resource "aws_vpc_security_group_egress_rule" "pvc_base" {
   tags              = { Name = "${var.prefix}-pvc-base-intra" }
 }
 
-# TODO - Turn this into a CIDR prefix group
 resource "aws_vpc_security_group_ingress_rule" "pvc_base" {
+  security_group_id = module.cluster_network.intra_cluster_security_group.id
+  description       = "Cluster ingress traffic"
+  prefix_list_id    = aws_ec2_managed_prefix_list.pvc_base.id
+  ip_protocol       = -1
+  tags = { Name = "${var.prefix}-pvc-base-intra" }
+}
+
+resource "aws_ec2_managed_prefix_list" "pvc_base" {
+  name           = "${var.prefix}-pvc-base-intra"
+  address_family = "IPv4"
+  max_entries    = length(var.vpc_ingress_cidr)
+}
+
+resource "aws_ec2_managed_prefix_list_entry" "pvc_base" {
   for_each = { for idx, cidr in var.vpc_ingress_cidr : idx => cidr }
 
-  security_group_id = module.cluster_network.intra_cluster_security_group.id
-  description       = "Owner-only traffic"
-  #ip_protocol       = "tcp"
-  #to_port           = "22"
-  #from_port         = "22"
-  ip_protocol       = -1
-  cidr_ipv4         = each.value
-  tags              = { Name = "${var.prefix}-pvc-base-intra" }
+  prefix_list_id = aws_ec2_managed_prefix_list.pvc_base.id
+  cidr           = each.value
+  description    = "${var.prefix}-pvc-base-intra cluster ingress"
 }
+
 
 # ------- Cluster  -------
 
@@ -178,20 +187,6 @@ resource "aws_eip" "pvc-base" {
   instance = each.value.id
   domain   = "vpc"
   tags     = { Name = each.value.tags.Name }
-}
-
-# Per-public IP address ingress traffic
-resource "aws_vpc_security_group_ingress_rule" "pvc-base-public-intra" {
-  for_each = { for idx, host in aws_eip.pvc-base : idx => host }
-
-  security_group_id = module.cluster_network.intra_cluster_security_group.id
-  description       = "Intra-cluster public traffic"
-  #ip_protocol       = "tcp"
-  #to_port           = "22"
-  #from_port         = "22"
-  ip_protocol       = -1 
-  cidr_ipv4         = "${each.value.public_ip}/32"
-  tags              = { Name = "${var.prefix}-pvc-base-intra (${each.value.tags.Name})" }
 }
 
 # ------- Ansible Inventory  -------
