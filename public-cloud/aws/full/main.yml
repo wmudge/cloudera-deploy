@@ -1,0 +1,45 @@
+---
+
+- name: Set up cloudera-deploy variables
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+  vars:
+    definition_path: "./"
+  tasks:
+    - name: Read definition variables
+      ansible.builtin.include_role:
+        name: cloudera.exe.init_deployment
+        public: yes
+      when: init__completed is undefined
+  tags:
+    - always
+
+- name: Set up CDP Public Cloud infrastructure (Ansible-based)
+  hosts: localhost
+  connection: local
+  environment: "{{ globals.env_vars }}"
+  gather_facts: yes
+  tasks:
+    - name: Validate Infrastructure configuration
+      ansible.builtin.import_role:
+        name: cloudera.exe.infrastructure
+        tasks_from: validate
+      tags:
+        - validate
+
+    - name: Initialize Infrastructure setup
+      ansible.builtin.import_role:
+        name: cloudera.exe.infrastructure
+        tasks_from: initialize_setup
+      tags:
+        - initialize
+        - validate
+
+    - name: Set up Infrastructure
+      ansible.builtin.import_role:
+        name: cloudera.exe.infrastructure
+        tasks_from: setup
+
+- name: Set up CDP Public Cloud
+  ansible.builtin.import_playbook: cloudera.exe.pbc_setup.yml
