@@ -1,4 +1,4 @@
-// Copyright 2023 Cloudera, Inc.
+// Copyright 2024 Cloudera, Inc.
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,9 +29,9 @@ vpc_ingress_cidr    = [
 domain              = "{{ domain }}"
 {% endif %}
 
-{% if tags is defined and tags is mapping %}
+{% if asset_tags is defined and asset_tags is mapping %}
 asset_tags = {
-{%   for k, v in tags.items() %}
+{%   for k, v in asset_tags.items() %}
   {{ k }} = "{{ v }}"
 {%   endfor %}
 }
