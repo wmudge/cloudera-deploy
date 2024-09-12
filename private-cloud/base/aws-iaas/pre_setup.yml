@@ -144,9 +144,10 @@
         name: dnsmasq_server
       vars:
         dnsmasq_upstream_nameservers: ["{{ vpc_cidr | ansible.utils.ipmath(2) }}"]
-        dnsmasq_realm: "{{ freeipa.realm | lower }}"
-        dnsmasq_ldap_servers: "{{ groups['freeipa'] }}"
+        dnsmasq_kerberos_realm: "{{ freeipa.realm | lower }}"
         dnsmasq_kerberos_servers: "{{ groups['freeipa'] }}"
+        dnsmasq_ldap_domain: "{{ freeipa.realm | lower }}"
+        dnsmasq_ldap_servers: "{{ groups['freeipa'] }}"
 
     # Add dns-rr records for URI records for KRB KDC discovery
     # https://sigmaris.info/blog/2018/04/encoding-dns-uri-records-for-dnsmasq/
