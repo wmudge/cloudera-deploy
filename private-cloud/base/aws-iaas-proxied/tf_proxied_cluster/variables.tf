@@ -63,6 +63,6 @@ variable "igw_name" {
 
 variable "domain" {
   type        = string
-  description = "Private subdomain for proxied hosts, e.g. pvc-base.cldr.example"
+  description = "Private domain for proxied hosts, e.g. example-cluster.cldr.internal"
   default     = ""
 }
