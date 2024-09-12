@@ -1,0 +1,59 @@
+# Copyright 2024 Cloudera, Inc.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Import the EPEL GPG key
+  ansible.builtin.rpm_key:
+    key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}"
+  register: gpg_install
+  until: gpg_install is succeeded
+  retries: 5
+  delay: 10
+
+- name: Enable the EPEL repository
+  ansible.builtin.yum:
+    name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+  register: repo_install
+  until: repo_install is succeeded
+  retries: 5
+  delay: 10
+
+- name: Install the HTTP proxy
+  ansible.builtin.package:
+    name: "{{ http_proxy_package }}"
+
+- name: Update the proxy configuration
+  ansible.builtin.lineinfile:
+    path: "{{ http_proxy_config }}"
+    line: "{{ param.value}}"
+    regexp: "{{ param.regexp }}"
+  loop:
+    - regexp: "^Port"
+      value: "Port {{ http_proxy_port }}"
+    - regexp: "^#?Syslog"
+      value: "Syslog On"
+    - regexp: "^#?Allow 127.0.0.1"
+      value: "#Allow 127.0.0.1"
+    - regexp: "^#?Allow ::1"
+      value: "#Allow ::1"
+  loop_control:
+    loop_var: param
+    label: "{{ param.value }}"
+  register: __config
+
+- name: Reload the HTTP proxy
+  ansible.builtin.service:
+    name: "{{ http_proxy_service }}"
+    enabled: yes
+    state: restarted
+  when: __config.changed
