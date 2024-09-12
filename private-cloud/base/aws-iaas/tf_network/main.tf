@@ -56,6 +56,7 @@ locals {
     tags = {}
   }])
   sg_intra_name = var.security_group_intra_name != "" ? var.security_group_intra_name : "${var.prefix}-pvc-base-intra"
+  sg_acme_name  = var.security_group_acme_name != "" ? var.security_group_acme_name : "${var.prefix}-pvc-base-acme-tls"
 }
 
 # ------- AWS Public Network infrastructure -------
@@ -168,4 +169,21 @@ resource "aws_vpc_security_group_egress_rule" "pvc_base" {
   description                  = "Self-reference egress rule"
   ip_protocol                  = -1
   referenced_security_group_id = aws_security_group.pvc_base.id
+}
+
+# ACME Directory (Let's Encrypt)
+resource "aws_security_group" "acme_tls" {
+  vpc_id      = data.aws_vpc.pvc_base.id
+  name        = local.sg_acme_name
+  description = "ACME Directory communication [${var.prefix}]"
+  tags        = { Name = local.sg_acme_name }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "acme_tls" {
+  security_group_id = aws_security_group.acme_tls.id
+  description       = "ACME http-01 challenge"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
 }

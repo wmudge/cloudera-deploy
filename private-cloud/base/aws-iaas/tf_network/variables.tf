@@ -104,3 +104,9 @@ variable "security_group_intra_name" {
   description = "Security Group for intra-cluster communication"
   default     = ""
 }
+
+variable "security_group_acme_name" {
+  type        = string
+  description = "Security Group for ACME Directory communication (e.g. Let's Encrypt)"
+  default     = ""
+}

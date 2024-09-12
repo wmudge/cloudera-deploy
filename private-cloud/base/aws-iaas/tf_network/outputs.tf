@@ -31,3 +31,8 @@ output "intra_cluster_security_group" {
   value       = aws_security_group.pvc_base
   description = "Intra-cluster traffic Security Group"
 }
+
+output "acme_tls_security_group" {
+  value       = aws_security_group.acme_tls
+  description = "ACME Directory traffic Security Group"
+}
