@@ -225,9 +225,10 @@ You can read more about [updating this configuration](https://ansible.readthedoc
 
 # Legacy Quickstart
 
-If you must, you can run the legacy `quickstart.sh` by checking out the `v1.7.4` branch (or tag) and then pinning the execution environment container to this `v1.x` branch:
+If you must, you can run the legacy `quickstart.sh` by checking out the `v1.7.1` tag and then pinning the execution environment container to the `v1.7.4` release:
 
 ```bash
+git checkout -b legacy_quickstart v1.7.1
 image_ver="v1.7.4" ./quickstart.sh
 ```
 
