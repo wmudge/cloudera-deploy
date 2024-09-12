@@ -1,0 +1,75 @@
+# Copyright 2024 Cloudera, Inc.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Collect the distribution facts
+  ansible.builtin.setup:
+    gather_subset: distribution
+
+- name: Load distribution variables
+  ansible.builtin.include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_version'] }}.yml"
+    - "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_major_version'] }}.yml"
+    - "{{ ansible_facts['distribution'] }}.yml"
+    - "{{ ansible_facts['os_family'] }}-{{ ansible_facts['distribution_version'] }}.yml"
+    - "{{ ansible_facts['os_family'] }}-{{ ansible_facts['distribution_major_version'] }}.yml"
+    - "{{ ansible_facts['os_family'] }}.yml"
+    - "default.yml"
+
+- name: Run distribution pre-tasks
+  ansible.builtin.include_tasks: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_version'] }}-pre.yml"
+    - "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_major_version'] }}-pre.yml"
+    - "{{ ansible_facts['distribution'] }}-pre.yml"
+    - "{{ ansible_facts['os_family'] }}-{{ ansible_facts['distribution_version'] }}-pre.yml"
+    - "{{ ansible_facts['os_family'] }}-{{ ansible_facts['distribution_major_version'] }}-pre.yml"
+    - "{{ ansible_facts['os_family'] }}-pre.yml"
+    - "default.yml"
+
+- name: Install snap
+  ansible.builtin.package:
+    name: snapd
+
+- name: Enable the snapd daemon
+  ansible.builtin.service:
+    name: snapd.socket
+    enabled: yes
+    state: started
+
+- name: Create the snap 'classic' symlink
+  ansible.builtin.file:
+    src: /var/lib/snapd/snap
+    dest: /snap
+    state: link
+  register: __snap_classic
+
+- name: Reboot the server to set up the snap paths
+  when: __snap_classic.changed
+  ansible.builtin.reboot:
+
+- name: Install certbot (via command)
+  ansible.builtin.command: 
+    cmd: snap install certbot --classic
+    creates: /snap/bin/certbot
+  register: __certbox_install
+  until: __certbox_install is succeeded
+  retries: 3
+  delay: 5
+
+- name: Create the certbot symlink
+  ansible.builtin.file:
+    src: /snap/bin/certbot
+    dest: /usr/bin/certbot
+    state: link
