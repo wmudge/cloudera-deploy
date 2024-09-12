@@ -221,6 +221,8 @@ clusters:
         YARN: [NODEMANAGER, GATEWAY]
         ZOOKEEPER: [SERVER]
 
+      Gateway: {}
+      
 mgmt:
   name: Cloudera Management Service
   services: [ALERTPUBLISHER, EVENTSERVER, HOSTMONITOR, REPORTSMANAGER, SERVICEMONITOR]
