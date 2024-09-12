@@ -12,5 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-plugin: cloud.terraform.terraform_provider
-project_path: tf_cluster
+---
+
+- name: Deprovision the infrastructure resources
+  hosts: localhost
+  connection: local 
+  gather_facts: no
+  tasks:
+    - name: Check for existing Terraform state file
+      ansible.builtin.stat:
+        path: tf_proxied_cluster/terraform.tfstate
+      register: __tf_state
+
+    - name: Teardown the demo infrastructure via Terraform
+      when: __tf_state.stat.exists
+      cloud.terraform.terraform:
+        project_path: "tf_proxied_cluster/"
+        state: "absent"

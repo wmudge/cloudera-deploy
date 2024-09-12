@@ -12,5 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-plugin: cloud.terraform.terraform_provider
-project_path: tf_cluster
+system_packages:
+  - tree 
+  - jq 
+  - zip
+  - python3-pip
+
+python_libraries:
+  - psycopg2-binary==2.9.5

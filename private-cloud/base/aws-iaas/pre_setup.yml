@@ -22,17 +22,17 @@
   tasks:
     - name: Set Terraform variables
       ansible.builtin.template:
-        dest: tf_proxied_cluster/terraform.tfvars
+        dest: tf_cluster/terraform.tfvars
         src: infra.tfvars.j2
     
     - name: Check for existing Terraform state file
       ansible.builtin.stat:
-        path: tf_proxied_cluster/terraform.tfstate
+        path: tf_cluster/terraform.tfstate
       register: __tf_state
 
     - name: Establish the infrastructure
       cloud.terraform.terraform:
-        project_path: "tf_proxied_cluster/"
+        project_path: "tf_cluster/"
         state: "present"
         force_init: "{{ not __tf_state.stat.exists }}"
         provider_upgrade: true
@@ -63,72 +63,208 @@
         mount_volumes: "{{ storage_volumes }}"
         mount_provider: "{{ infra_type }}"
 
+- name: Enable and configure host services
+  hosts: all
+  gather_facts: no
+  become: yes
+  tags: system
+  tasks:
+    - name: Retrieve service facts
+      ansible.builtin.service_facts:
+
+    - name: Install rngd service
+      when: not (ansible_facts.services | dict2items | map(attribute='value') | selectattr('name', 'eq', 'rngd') | list)
+      ansible.builtin.package:
+        name: rng-tools
+        state: latest
+
+    - name: Enable rngd service
+      ansible.builtin.service:
+        name: rngd
+        enabled: yes
+        state: started
+      
+    - name: Configure kernel parameters
+      ansible.posix.sysctl:
+        name: "{{ __sysctl.key }}"
+        value: "{{ __sysctl.value | string }}"
+        state: present
+        reload: yes
+      loop: "{{ params | dict2items }}"
+      loop_control:
+        loop_var: __sysctl
+        label: "{{ __sysctl.key }}"
+      vars:
+       params:
+        vm.swappiness: 1
+        net.ipv6.conf.all.disable_ipv6: 1
+        net.ipv6.conf.default.disable_ipv6: 1
+        net.ipv6.conf.lo.disable_ipv6: 0
+      register: __kernel
+
+    - name: Set timezone to UTC
+      community.general.timezone:
+        hwclock: UTC
+
+    - name: Disable firewalld
+      when: ansible_facts.services | dict2items | map(attribute="value") | selectattr('name', 'eq', 'firewalld') | list
+      ansible.builtin.service:
+        name: firewalld
+        enabled: no
+        state: stopped
+
+    - name: Disable SELinux
+      ansible.posix.selinux:
+        state: disabled
+        update_kernel_param: yes
+      register: __selinux
+
+    - name: Reboot host
+      when: __kernel.changed or __selinux.reboot_required
+      ansible.builtin.reboot:
+
+- name: Provision dnsmasq services
+  hosts: dnsmasq
+  gather_facts: no
+  become: yes
+  tags: dnsmasq
+  vars:
+    vpc_cidr: "{{ lookup('cloud.terraform.tf_output', 'vpc', project_path='tf_cluster')['cidr_block'] }}"
+  tasks:
+    - name: Set up dnsmasq server
+      ansible.builtin.import_role:
+        name: dnsmasq_server
+      vars:
+        dnsmasq_upstream_nameservers: ["{{ vpc_cidr | ansible.utils.ipmath(2) }}"]
+
+- name: Establish DNS resolution to dnsmasq server
+  hosts: all:!dnsmasq
+  gather_facts: no
+  become: yes
+  tags: dnsmasq
+  tasks:
+    - name: Set up DNS resolution
+      ansible.builtin.import_role:
+        name: dnsmasq_client
+      vars:
+        dnsmasq_nameservers: "{{ groups['dnsmasq'] | map('extract', hostvars, morekeys=['ansible_default_ipv4']) | map(attribute='address') | list }}"
+
+# - name: Provision FreeIPA services
+#   hosts: freeipa
+#   gather_facts: yes
+#   become: yes
+#   tags: 
+#     - freeipa
+#     - freeipa_server
+#   vars:
+#     vpc_cidr: "{{ lookup('cloud.terraform.tf_output', 'vpc', project_path='tf_cluster')['cidr_block'] }}"
+#   module_defaults:
+#     freeipa.ansible_freeipa.ipadnszone:
+#       ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
+#     freeipa.ansible_freeipa.ipadnsrecord:
+#       ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
+#   tasks:
+#     - name: Set up the local FreeIPA server
+#       ansible.builtin.import_role:
+#         name: cloudera.exe.freeipa_server
+#       vars:
+#         ipaserver_hostname: "{{ inventory_hostname }}"
+#         ipaserver_realm: "{{ freeipa.realm }}"
+#         ipaserver_domain: "nip.io" # "{{ domain }}"
+#         ipaserver_no_host_dns: yes
+#         ipaserver_setup_firewalld: no
+#         ipaserver_setup_dns: no
+#         # See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html
+#         #ipaserver_resolv_nameservers: ["{{ vpc_cidr | ansible.utils.ipmath(2) }}"]
+#         #ipaserver_auto_reverse: yes
+#         #ipaserver_no_forwarders: yes
+#         #ipaserver_forward_policy: only
+#         #ipaserver_recursion_acl_cidr: "{{ vpc_cidr }}"
+#         ipaserver_copy_csr_to_controller: yes
+#         ipaserver_ca_subject: "CN=CLDR-{{ name_prefix }}-RootCA,O={{ freeipa.realm }}"
+#         ipaclient_servers: ["{{ inventory_hostname }}"]
+#         ipaclient_mkhomedir: yes
+#         # TODO Add test for these parameters - error in role is opaque
+#         ipadm_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
+#         ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
+
 - name: Provision FreeIPA services
   hosts: freeipa
   gather_facts: yes
   become: yes
-  tags: freeipa
+  tags:
+    - freeipa
+    - freeipa_server
   vars:
-    vpc_cidr: "{{ lookup('cloud.terraform.tf_output', 'vpc', project_path='tf_proxied_cluster')['cidr_block'] }}"
-  module_defaults:
-    freeipa.ansible_freeipa.ipadnszone:
-      ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
-    freeipa.ansible_freeipa.ipadnsrecord:
-      ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
+    vpc_cidr: "{{ lookup('cloud.terraform.tf_output', 'vpc', project_path='tf_cluster')['cidr_block'] }}"
   tasks:
+    - name: Install base FreeIPA server packages
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - "@idm:DL1:8090020231016161112/server"
+        - "@idm:DL1:8090020231016161112/dns"
+        - "@idm:DL1:8090020231016161112/client"
+
     - name: Set up the local FreeIPA server
       ansible.builtin.import_role:
-        name: cloudera.exe.freeipa_server
+        name: freeipa.ansible_freeipa.ipaserver
       vars:
+        state: present
+        ipaserver_install_packages: no
         ipaserver_hostname: "{{ inventory_hostname }}"
         ipaserver_realm: "{{ freeipa.realm }}"
-        ipaserver_domain: "{{ domain }}"
+        ipaserver_domain: "nip.io" # "{{ domain }}"
         ipaserver_no_host_dns: yes
         ipaserver_setup_firewalld: no
-        ipaserver_setup_dns: yes
-        # See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html
-        ipaserver_resolv_nameservers: ["{{ vpc_cidr | ansible.utils.ipmath(2) }}"]
-        ipaserver_auto_reverse: yes
-        ipaserver_no_forwarders: yes
-        ipaserver_forward_policy: only
-        ipaserver_recursion_acl_cidr: "{{ vpc_cidr }}"
+        ipaserver_setup_dns: no
         ipaserver_copy_csr_to_controller: yes
         ipaserver_ca_subject: "CN=CLDR-{{ name_prefix }}-RootCA,O={{ freeipa.realm }}"
+        ipaclient_servers: ["{{ inventory_hostname }}"]
         ipaclient_mkhomedir: yes
-        # TODO Add test for these parameters - error in role is opaque
         ipadm_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
         ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
-    
-    - name: Create DNS zone for '{{ domain }}' in provisioned FreeIPA service
-      freeipa.ansible_freeipa.ipadnszone:
-        zone_name: "{{ domain }}"
-        dynamic_update: yes
-        allow_sync_ptr: yes
-        forward_policy: none
-
-    - name: Create reverse DNS zone for '{{ vpc_cidr }}' in provisioned FreeIPA service
-      freeipa.ansible_freeipa.ipadnszone:
-        name_from_ip: "{{ vpc_cidr }}"
-        dynamic_update: yes
-        allow_sync_ptr: yes
 
 - name: Register all hosts with local FreeIPA server
   hosts: all:!freeipa
   gather_facts: yes
   become: yes
-  tags: freeipa
+  tags:
+    - freeipa
+    - freeipa_client
   tasks:
     - name: Register host with local FreeIPA server
       ansible.builtin.import_role:
         name: cloudera.exe.freeipa_client
       vars:
-        ipaserver_domain: "{{ domain }}"
+        ipaserver_domain: "{{ freeipa.realm }}"
         ipaserver_realm: "{{ freeipa.realm }}"
         ipa_hosts: "{{ groups['freeipa'] }}"
         ipa_server_ips: "{{ groups['freeipa'] | map('extract', hostvars, ['ansible_host']) | list }}"
         ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('ansible.builtin.env', 'IPA_PASSWORD', default='Undefined')) }}"
         ipaadmin_principal: "{{ freeipa.ipaadmin_user | default(lookup('ansible.builtin.env', 'IPA_USER', default=omit)) }}"
-        enable_dns: yes  
+        enable_dns: no
+
+- name: Register all hosts with local FreeIPA server
+  hosts: all:!freeipa
+  gather_facts: yes
+  become: yes
+  tags:
+    - freeipa
+    - freeipa_client
+  tasks:
+  - name: Set up the FreeIPA Client
+    ansible.builtin.include_role:
+      name: freeipa.ansible_freeipa.ipaclient
+    vars:
+      state: present
+      ipaclient_hostname: "{{ inventory_hostname }}"
+      ipaclient_servers: "{{ groups['freeipa'] }}"
+      ipaclient_mkhomedir: yes
+      ipaserver_domain: "{{ freeipa.realm }}"
+      ipaserver_realm: "{{ freeipa.realm }}"
+      ipaserver_setup_dns: no
 
     - name: Update SSSD to enable Kerberos file ticket caching
       ansible.builtin.import_role:

@@ -13,21 +13,9 @@
 // limitations under the License.
 
 ssh_public_key_file = "{{ lookup('ansible.builtin.env', 'SSH_PUBLIC_KEY_FILE') }}"
+domain              = "{{ domain }}"
 prefix              = "{{ name_prefix}}"
 region              = "{{ infra_region }}"
-
-{% if ingress_cidr is defined and ingress_cidr is iterable %}
-vpc_ingress_cidr    = [
-{%- set sep = joiner(",") %}
-{%   for c in ingress_cidr %}{{ sep() }}
-  "{{ c }}"
-{% endfor %}
-]
-{% endif %}
-
-{% if domain is defined %}
-domain              = "{{ domain }}"
-{% endif %}
 
 {% if tags is defined and tags is mapping %}
 asset_tags = {

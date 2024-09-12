@@ -13,4 +13,4 @@
 # limitations under the License.
 
 plugin: cloud.terraform.terraform_provider
-project_path: tf_cluster
+project_path: tf_proxied_cluster

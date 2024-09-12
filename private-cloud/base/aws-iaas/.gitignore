@@ -36,6 +36,10 @@ tf_deployment*
 # Static inventory files
 inventory_static*
 
+# Local collections
+collections/*
+!collections/requirements.yml
+
 # Per-user configuration files
 config.yml
 

@@ -1,0 +1,4 @@
+---
+# defaults file for dnsmasq_server
+
+dnsmasq_upstream_nameservers: "{{ mandatory | Undef(hint='You must define the upstream nameservers for dnsmasq')}}"

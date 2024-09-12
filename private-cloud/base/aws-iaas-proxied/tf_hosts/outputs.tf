@@ -12,5 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-plugin: cloud.terraform.terraform_provider
-project_path: tf_cluster
+output "hosts" {
+  value       = aws_instance.pvc_base
+  description = "Hosts"
+}

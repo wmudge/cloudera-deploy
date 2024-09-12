@@ -12,5 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-plugin: cloud.terraform.terraform_provider
-project_path: tf_cluster
+output "availability_zones" {
+  value       = data.aws_availability_zones.pvc_base
+  description = "AWS Availability Zones"
+}
+
+output "public_subnets" {
+  value       = values(aws_subnet.pvc_base_public)
+  description = "Cluster public subnets"
+}
+
+output "private_subnets" {
+  value       = values(aws_subnet.pvc_base_private)
+  description = "Cluster private subnets"
+}
+
+output "intra_cluster_security_group" {
+  value       = aws_security_group.pvc_base
+  description = "Intra-cluster traffic Security Group"
+}

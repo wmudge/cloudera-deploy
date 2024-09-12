@@ -1,0 +1,74 @@
+# Copyright 2024 Cloudera, Inc.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Gather network details
+  ansible.builtin.setup:
+    gather_subset: network
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Install dnsmasq service
+  ansible.builtin.package:
+    name:
+      - dnsmasq
+      - bind-utils
+    state: latest
+
+- name: Set host entries
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    backup: yes
+    block: "{{ query('community.general.dig', *groups['all']) | zip(groups['all']) | map('join', ' ') | join('\n') }}"
+
+# Not needed:
+# bind-interfaces
+# interface={{ ansible_default_ipv4['interface'] }}
+# listen-address=127.0.0.1
+- name: Set dnsmasq configuration
+  ansible.builtin.blockinfile:
+    path: /etc/dnsmasq.conf
+    backup: yes
+    block: |
+      domain-needed
+      bogus-priv
+      no-resolv
+      {{ ["server="] | product(dnsmasq_upstream_nameservers | list) | map("join", "") | join("\n") }}
+  register: __dnsmasq_config
+
+# Set override in /etc/systemd/system/dnsmasq.service.d ?
+
+- name: Ensure dnsmasq service is running
+  when: __dnsmasq_config.changed
+  ansible.builtin.service:
+    name: dnsmasq
+    enabled: yes
+    state: restarted
+
+- name: Set DNS resolver to use dnsmasq
+  community.general.nmcli:
+    conn_name: "System {{ ansible_default_ipv4['interface'] }}"
+    type: ethernet
+    dns4: "127.0.0.1"
+    state: present
+  register: __netmgr
+
+- name: Restart Network Manager
+  when: __netmgr.changed
+  ansible.builtin.service:
+    name: NetworkManager
+    state: restarted

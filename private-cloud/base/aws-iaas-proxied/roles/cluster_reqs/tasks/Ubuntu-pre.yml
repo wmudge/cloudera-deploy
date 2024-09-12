@@ -12,5 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-plugin: cloud.terraform.terraform_provider
-project_path: tf_cluster
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
