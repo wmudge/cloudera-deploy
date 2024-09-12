@@ -64,7 +64,7 @@ variable "igw_name" {
 variable "domain" {
   type        = string
   description = "Parent domain"
-  default     = "nip.io"
+  default     = "pvc.cloudera-labs.com"
 }
 
 variable "vpc_ingress_cidr" {

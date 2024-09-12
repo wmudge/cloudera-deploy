@@ -110,7 +110,7 @@ resource "aws_vpc_security_group_ingress_rule" "pvc_base" {
   description       = "Cluster ingress traffic"
   prefix_list_id    = aws_ec2_managed_prefix_list.pvc_base.id
   ip_protocol       = -1
-  tags = { Name = "${var.prefix}-pvc-base-intra" }
+  tags              = { Name = "${var.prefix}-pvc-base-intra" }
 }
 
 resource "aws_ec2_managed_prefix_list" "pvc_base" {
@@ -135,7 +135,7 @@ module "masters" {
   depends_on = [aws_key_pair.pvc_base, data.aws_ami.pvc_base]
 
   prefix          = var.prefix
-  name            = "master"
+  name            = "${var.prefix}-master"
   image_id        = data.aws_ami.pvc_base.image_id
   instance_type   = "m5.4xlarge"
   ssh_key_pair    = aws_key_pair.pvc_base.key_name
@@ -153,7 +153,7 @@ module "workers" {
   depends_on = [aws_key_pair.pvc_base, data.aws_ami.pvc_base]
 
   prefix          = var.prefix
-  name            = "worker"
+  name            = "${var.prefix}-worker"
   quantity        = 2
   image_id        = data.aws_ami.pvc_base.image_id
   instance_type   = "c5.2xlarge"
@@ -171,14 +171,17 @@ module "freeipa" {
   source     = "../tf_hosts"
   depends_on = [aws_key_pair.pvc_base, data.aws_ami.pvc_base]
 
-  prefix          = var.prefix
-  name            = "freeipa"
-  image_id        = data.aws_ami.pvc_base.image_id
-  instance_type   = "m5.large" # TODO Look up via region
-  ssh_key_pair    = aws_key_pair.pvc_base.key_name
-  subnet_ids      = module.cluster_network.public_subnets[*].id
-  security_groups = [module.cluster_network.intra_cluster_security_group.id]
-  public_ip       = true
+  prefix        = var.prefix
+  name          = "${var.prefix}-freeipa"
+  image_id      = data.aws_ami.pvc_base.image_id
+  instance_type = "m5.large" # TODO Look up via region
+  ssh_key_pair  = aws_key_pair.pvc_base.key_name
+  subnet_ids    = module.cluster_network.public_subnets[*].id
+  security_groups = [
+    module.cluster_network.intra_cluster_security_group.id,
+    module.cluster_network.acme_tls_security_group.id
+  ]
+  public_ip = true
 }
 
 resource "aws_eip" "pvc-base" {
@@ -188,6 +191,8 @@ resource "aws_eip" "pvc-base" {
   domain   = "vpc"
   tags     = { Name = each.value.tags.Name }
 }
+
+
 
 # ------- Ansible Inventory  -------
 
@@ -245,7 +250,7 @@ resource "ansible_group" "deployment" {
 resource "ansible_host" "masters" {
   for_each = { for idx, host in module.masters.hosts : idx => host }
 
-  name = format("%s-%s-%s.%s", each.value.tags["Name"], var.prefix, replace(aws_eip.pvc-base[each.key].public_ip, ".", "-"), var.domain)
+  name = format("%s.%s.%s", each.value.tags["Name"], replace(aws_eip.pvc-base[each.key].public_ip, ".", "-"), var.domain)
 
   groups = [
     ansible_group.masters.name,
@@ -261,7 +266,7 @@ resource "ansible_host" "masters" {
 resource "ansible_host" "workers" {
   for_each = { for idx, host in module.workers.hosts : idx => host }
 
-  name = format("%s-%s-%s.%s", each.value.tags["Name"], var.prefix, replace(aws_eip.pvc-base[each.key + length(module.masters.hosts)].public_ip, ".", "-"), var.domain)
+  name = format("%s.%s.%s", each.value.tags["Name"], replace(aws_eip.pvc-base[each.key + length(module.masters.hosts)].public_ip, ".", "-"), var.domain)
 
   groups = [
     ansible_group.workers.name
@@ -275,7 +280,7 @@ resource "ansible_host" "workers" {
 resource "ansible_host" "freeipa" {
   for_each = { for idx, host in module.freeipa.hosts : idx => host }
 
-  name = format("%s-%s-%s.%s", each.value.tags["Name"], var.prefix, replace(aws_eip.pvc-base[each.key + length(module.masters.hosts) + length(module.workers.hosts)].public_ip, ".", "-"), var.domain)
+  name = format("%s.%s.%s", each.value.tags["Name"], replace(aws_eip.pvc-base[each.key + length(module.masters.hosts) + length(module.workers.hosts)].public_ip, ".", "-"), var.domain)
 
   groups = [
     ansible_group.freeipa.name,
