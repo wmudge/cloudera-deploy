@@ -69,8 +69,18 @@
         mount_volumes: "{{ storage_volumes }}"
         mount_provider: "{{ infra_type }}"
 
-- name: Enable and configure host services
+- name: Adjust timezones
   hosts: all
+  gather_facts: no
+  become: yes
+  tags: system
+  tasks:
+    - name: Set timezone to UTC
+      community.general.timezone:
+        hwclock: UTC
+
+- name: Enable and configure cluster host services
+  hosts: deployment
   gather_facts: no
   become: yes
   tags: system
@@ -180,6 +190,16 @@
       vars:
         dnsmasq_nameservers: "{{ groups['dnsmasq'] | map('extract', hostvars, morekeys=['ansible_default_ipv4']) | map(attribute='address') | list }}"
 
+- name: Provision Certbot
+  hosts: knox_gateway,freeipa
+  gather_facts: no
+  become: yes
+  roles:
+    - certbot
+  tags:
+    - certbot
+    - certbot_install
+
 - name: Provision FreeIPA services
   hosts: freeipa
   gather_facts: yes
@@ -190,12 +210,12 @@
   vars:
     vpc_cidr: "{{ lookup('cloud.terraform.tf_output', 'vpc', project_path='tf_cluster')['cidr_block'] }}"
     le_certs:
-      - "isrgrootx1.pem"
-      - "isrg-root-x2.pem"
-      - "lets-encrypt-r3.pem"
-      - "lets-encrypt-e1.pem"
-      - "lets-encrypt-r4.pem"
-      - "lets-encrypt-e2.pem"
+      - "/certs/isrgrootx1.pem"
+      - "/certs/isrg-root-x2.pem"
+      - "/certs/2024/e5.pem"
+      - "/certs/2024/e6.pem"
+      - "/certs/2024/r10.pem"
+      - "/certs/2024/r11.pem"
   tasks:
     - name: Install base FreeIPA server packages
       ansible.builtin.package:
@@ -224,55 +244,7 @@
         ipaclient_mkhomedir: yes
         ipadm_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
         ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
-    
-    - name: Import the EPEL GPG key
-      ansible.builtin.rpm_key:
-        key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}"
-      register: gpg_install
-      until: gpg_install is succeeded
-      retries: 5
-      delay: 10
-
-    - name: Enable the EPEL repository
-      ansible.builtin.yum:
-        name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
-      register: repo_install
-      until: repo_install is succeeded
-      retries: 5
-      delay: 10
-      
-    - name: Install snap
-      ansible.builtin.package:
-        name: snapd
-
-    - name: Enable the snapd daemon
-      ansible.builtin.service:
-        name: snapd.socket
-        enabled: yes
-        state: started
-
-    - name: Create the snap 'classic' symlink
-      ansible.builtin.file:
-        src: /var/lib/snapd/snap
-        dest: /snap
-        state: link
-      register: __snap_classic
-    
-    - name: Reboot the server to set up the snap paths
-      when: __snap_classic.changed
-      ansible.builtin.reboot:
-    
-    - name: Install certbot (via command)
-      ansible.builtin.command: 
-        cmd: snap install certbot --classic
-        creates: /snap/bin/certbot
-
-    # - name: Create the certbot symlink
-    #   ansible.builtin.file:
-    #     src: /snap/bin/certbot
-    #     dest: /usr/bin/certbot
-    #     state: link
-    
+       
     - name: Set up the SSL directory
       ansible.builtin.file:
         path: "/etc/ssl/{{ inventory_hostname }}"
@@ -282,13 +254,10 @@
       ansible.builtin.get_url:
         dest: "/etc/ssl/{{ inventory_hostname }}"
         url: "{{ le_cert_url }}"
-      loop: "{{ ['https://letsencrypt.org/certs/'] | product(le_certs) | map('join') | list }}"
+      loop: "{{ ['https://letsencrypt.org'] | product(le_certs) | map('join') | list }}"
       loop_control:
         loop_var: le_cert_url
       register: __le_certs
-
-    - debug:
-        var: __le_certs
 
     - name: Install the Lets Encrypt root certificates in the FreeIPA CA
       when: not __le_certs.results | rejectattr('changed') | list
@@ -365,3 +334,13 @@
     - name: Establish additional cluster host requirements
       ansible.builtin.import_role:
         name: cluster_reqs
+
+- name: Enable HTTP proxy on jump host
+  hosts: jump_host
+  gather_facts: yes
+  become: yes
+  tags: http_proxy
+  tasks:
+    - name: Set up HTTP Proxy
+      ansible.builtin.import_role:
+        name: http_proxy
