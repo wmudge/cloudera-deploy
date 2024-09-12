@@ -107,3 +107,15 @@ variable "freeipa_ui_port" {
   description = "FreeIPA UI HTTPS port"
   default     = 443
 }
+
+variable "http_proxy_security_group_name" {
+  type = string
+  description = "Security Group name for the HTTP Proxy"
+  default = ""
+}
+
+variable "http_proxy_port" {
+  type = number
+  description = "HTTP Proxy port"
+  default = 8899
+}
