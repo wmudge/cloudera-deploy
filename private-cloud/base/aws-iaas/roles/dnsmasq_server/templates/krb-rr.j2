@@ -5,8 +5,8 @@ srv-host=_kerberos-master._tcp.{{ dnsmasq_kerberos_realm }},{{ krb_server }},88
 srv-host=_kerberos-master._udp.{{ dnsmasq_kerberos_realm }},{{ krb_server }},88
 srv-host=_kpasswd._tcp.{{ dnsmasq_kerberos_realm }},{{ krb_server }},464
 srv-host=_kpasswd._udp.{{ dnsmasq_kerberos_realm }},{{ krb_server }},464
-dns-rr=_kerberos.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "tcp", krb_server + "."] | join(":") | cloudera.exe.to_dns_value }}
-dns-rr=_kerberos.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "udp", krb_server + "."] | join(":") | cloudera.exe.to_dns_value }}
-dns-rr=_kpasswd.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "tcp", krb_server + "."] | join(":") | cloudera.exe.to_dns_value }}
-dns-rr=_kpasswd.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "udp", krb_server + "."] | join(":") | cloudera.exe.to_dns_value }}
+dns-rr=_kerberos.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "tcp", krb_server + "."] | join(":") | to_dns_value }}
+dns-rr=_kerberos.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "udp", krb_server + "."] | join(":") | to_dns_value }}
+dns-rr=_kpasswd.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "tcp", krb_server + "."] | join(":") | to_dns_value }}
+dns-rr=_kpasswd.{{ dnsmasq_kerberos_realm }},256,{{ ["krb5srv", "m", "udp", krb_server + "."] | join(":") | to_dns_value }}
 {% endfor %}
