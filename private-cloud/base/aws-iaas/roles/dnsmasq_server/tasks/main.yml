@@ -14,9 +14,12 @@
 
 ---
 
-- name: Gather network details
+- name: Gather network details for all hosts
   ansible.builtin.setup:
     gather_subset: network
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['all'] }}"
 
 - name: Set hostname
   ansible.builtin.hostname:
@@ -29,16 +32,14 @@
       - bind-utils
     state: latest
 
-- name: Set host entries
+- name: Set host entry
   ansible.builtin.blockinfile:
     path: /etc/hosts
     backup: yes
-    block: "{{ query('community.general.dig', *groups['all']) | zip(groups['all']) | map('join', ' ') | join('\n') }}"
+    # block: "{{ ansible_default_ipv4.address }} {{ inventory_hostname }}"
+    block: "{{ groups['all'] | map('extract', hostvars) | map(attribute='ansible_default_ipv4') | map(attribute='address') | zip(groups['all']) | map('join', ' ') | join('\n') }}"
+  register: __hosts
 
-# Not needed:
-# bind-interfaces
-# interface={{ ansible_default_ipv4['interface'] }}
-# listen-address=127.0.0.1
 - name: Set dnsmasq configuration
   ansible.builtin.blockinfile:
     path: /etc/dnsmasq.conf
@@ -47,13 +48,15 @@
       domain-needed
       bogus-priv
       no-resolv
-      {{ ["server="] | product(dnsmasq_upstream_nameservers | list) | map("join", "") | join("\n") }}
+      {{ servers }}
+      {{ addresses | default(omit) }}
+  vars:
+    servers: "{{ ['server='] | product(dnsmasq_upstream_nameservers | list) | map('join', '') | join('\n') }}"
+    addresses: "{{ ['address='] | product(dnsmasq_address_map | dict2items | map(attribute='key')) | map('join', '/') | zip(dnsmasq_address_map | dict2items | map(attribute='value')) | map('join', '/') | join('\n') }}"
   register: __dnsmasq_config
 
-# Set override in /etc/systemd/system/dnsmasq.service.d ?
-
 - name: Ensure dnsmasq service is running
-  when: __dnsmasq_config.changed
+  when: __dnsmasq_config.changed or __hosts.changed
   ansible.builtin.service:
     name: dnsmasq
     enabled: yes
