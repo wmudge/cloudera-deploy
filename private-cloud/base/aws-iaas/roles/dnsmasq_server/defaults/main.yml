@@ -3,3 +3,7 @@
 
 dnsmasq_upstream_nameservers: "{{ mandatory | Undef(hint='You must define the upstream nameservers for dnsmasq')}}"
 dnsmasq_address_map: {}
+dnsmasq_kerberos_realm: ""
+dnsmasq_kerberos_servers: []
+dnsmasq_ldap_domain: ""
+dnsmasq_ldap_servers: []

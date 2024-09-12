@@ -50,17 +50,13 @@
       no-resolv
       {{ servers }}
       {{ addresses | default(omit) }}
-      {{ krb_srv | default(omit) }}
-      {{ kpasswd_srv | default(omit) }}
-      {{ ldap_srv | default(omit) }}
-      {{ krb_uri | default(omit) }}
+      {{ kerberos | default(omit) }}
+      {{ ldap | default(omit) }}
   vars:
     servers: "{{ ['server='] | product(dnsmasq_upstream_nameservers | list) | map('join', '') | join('\n') }}"
     addresses: "{{ ['address='] | product(dnsmasq_address_map | dict2items | map(attribute='key')) | map('join', '/') | zip(dnsmasq_address_map | dict2items | map(attribute='value')) | map('join', '/') | join('\n') }}"
-    krb_srv: "{{ ['srv-host=_kerberos', 'srv-host=_kerberos-master'] | product(['_tcp', '_udp']) | product([dnsmasq_realm]) | map('flatten') | map('join', '.') | product(dnsmasq_kerberos_servers) | product(['88']) | map('flatten') | map('join', ',') | join('\n') }}"
-    kpasswd_srv: "{{ ['srv-host=_kpasswd'] | product(['_tcp', '_udp']) | product([dnsmasq_realm]) | map('flatten') | map('join', '.') | product(dnsmasq_kerberos_servers) | product(['464']) | map('flatten') | map('join', ',') | join('\n') }}"
-    ldap_srv: "{{ ['srv-host=_ldap._tcp.' + dnsmasq_realm] | product(dnsmasq_kerberos_servers) | map('join', ',') | product(['389']) | map('join', ',') | join('\n') }}"  
-    krb_uri: "{{ ['dns-rr=_kerberos', 'dns-rr=_kpasswd'] | product([dnsmasq_realm]) | map('join', '.') | product(['256']) | map('join', ',') | product(['krb5srv:m'] | product(['tcp','udp']) | product(dnsmasq_kerberos_servers) | map('flatten') | map('join', ':') | product(['.']) | map('join') | map('cloudera.exe.to_dns_value') | list) | map('join', ',') | join('\n') }}"
+    kerberos: "{{ lookup('template', 'ldap-rr.j2') }}"
+    ldap: "{{ lookup('template', 'krb-rr.j2') }}"
     
     # srv-host=_ldap._tcp.cldr.deployment,test06-freeipa-01.18-191-128-246.pvc.cloudera-labs.com,389
     # srv-host=_kerberos._tcp.cldr.deployment,test06-freeipa-01.18-191-128-246.pvc.cloudera-labs.com,88

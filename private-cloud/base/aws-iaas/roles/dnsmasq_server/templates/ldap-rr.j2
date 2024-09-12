@@ -1,0 +1,3 @@
+{% for ldap_server in dnsmasq_ldap_servers %}
+srv-host=_ldap._tcp.{{ dnsmasq_ldap_domain }},{{ ldap_server }},389
+{% endfor %}
