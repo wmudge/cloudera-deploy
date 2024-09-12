@@ -60,3 +60,8 @@
   tasks:
     - name: Reboot all cluster hosts
       ansible.builtin.reboot:
+
+# The above play fails when the ssh jump host gets rebooted while the cluster
+# instances are also getting rebooted. Either add a retry sequence to allow the
+# jump host to come back online or split out the jump host into a non-cluster
+# instance
