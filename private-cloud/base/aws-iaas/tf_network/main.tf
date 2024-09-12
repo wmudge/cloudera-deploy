@@ -153,7 +153,7 @@ resource "aws_route_table_association" "pvc_base_private" {
 resource "aws_security_group" "pvc_base" {
   vpc_id      = data.aws_vpc.pvc_base.id
   name        = local.sg_intra_name
-  description = "Intra-cluster communication [${var.prefix}]"
+  description = "Intra-cluster traffic [${var.prefix}]"
   tags        = { Name = local.sg_intra_name }
 }
 
@@ -171,11 +171,11 @@ resource "aws_vpc_security_group_egress_rule" "pvc_base" {
   referenced_security_group_id = aws_security_group.pvc_base.id
 }
 
-# ACME Directory (Let's Encrypt)
+# ACME Directory Challenge
 resource "aws_security_group" "acme_tls" {
   vpc_id      = data.aws_vpc.pvc_base.id
   name        = local.sg_acme_name
-  description = "ACME Directory communication [${var.prefix}]"
+  description = "ACME Directory challenge traffic [${var.prefix}]"
   tags        = { Name = local.sg_acme_name }
 }
 
@@ -186,4 +186,5 @@ resource "aws_vpc_security_group_ingress_rule" "acme_tls" {
   from_port         = 80
   to_port           = 80
   ip_protocol       = "tcp"
+  tags              = { Name = "${var.prefix}-pvc-base-acme-challenge" }
 }

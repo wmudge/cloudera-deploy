@@ -61,13 +61,49 @@ variable "igw_name" {
   default     = ""
 }
 
-variable "domain" {
+variable "public_domain" {
   type        = string
-  description = "Parent domain"
+  description = "Domain for public hosts"
   default     = "pvc.cloudera-labs.com"
 }
 
 variable "vpc_ingress_cidr" {
   type        = list(string)
-  description = "List of CIDR to limit ingress"
+  description = "List of CIDR to limit ingress for SSH and Knox Proxy"
+}
+
+variable "private_domain" {
+  type        = string
+  description = "Domain for private hosts"
+  default     = "cldr.internal"
+}
+
+variable "ssh_security_group_name" {
+  type = string
+  description = "Security Group name for SSH"
+  default = ""
+}
+
+variable "knox_gateway_security_group_name" {
+  type        = string
+  description = "Security Group name for the Knox Gateway"
+  default     = ""
+}
+
+variable "knox_gateway_port" {
+  type        = number
+  description = "Knox Gateway HTTPS port"
+  default     = 8443
+}
+
+variable "freeipa_ui_security_group_name" {
+  type        = string
+  description = "Security Group name for the FreeIPA UI"
+  default     = ""
+}
+
+variable "freeipa_ui_port" {
+  type        = number
+  description = "FreeIPA UI HTTPS port"
+  default     = 443
 }

@@ -55,5 +55,7 @@ resource "aws_instance" "pvc_base" {
     http_tokens = data.aws_ami.pvc_base.imds_support == "v2.0" ? "required" : "optional"
   }
 
-  tags = merge(var.tags, { Name = format("%s-%02d", local.instance_name, count.index + var.offset + 1) })
+  tags = merge(var.tags, {
+    Name = var.quantity == 1 ? local.instance_name : format("%s-%02d", local.instance_name, count.index + var.offset + 1)
+  })
 }
