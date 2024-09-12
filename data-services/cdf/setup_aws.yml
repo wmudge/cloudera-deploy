@@ -1,0 +1,50 @@
+---
+
+# Copyright 2023 Cloudera, Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Set up CDP Cloudera Data Flow (CDF) on AWS
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Confirm input parameters
+      ansible.builtin.assert:
+        that:
+          - env_name is defined
+          - env_name is string
+        fail_msg: "You must provide a target CDP environment name; missing 'env_name' parameter"
+        quiet: yes
+
+    - name: Retrieve CDP Environment details
+      cloudera.cloud.env_info:
+        name: "{{ env_name }}"
+      register: __env
+      failed_when: __env.environments | count != 1
+    
+    - name: Extract subnet details
+      ansible.builtin.set_fact:
+        private_subnets: "{{ __env.environments[0].network.subnetMetadata | dict2items | map(attribute='value') | selectattr('subnetName', 'search', 'pvt') | map(attribute='subnetId') | list }}"
+        public_subnets: "{{ __env.environments[0].network.subnetMetadata | dict2items | map(attribute='value') | selectattr('subnetName', 'search', 'pub') | map(attribute='subnetId') | list }}"
+
+    - name: Enable CDP Data Flow Services
+      cloudera.cloud.df_service:
+        state: present
+        env_crn: "{{ __env.environments[0].crn }}"
+        public_loadbalancer: yes
+        nodes_min: 1
+        nodes_max: 4
+        cluster_subnets: "{{ private_subnets }}"
+        loadbalancer_subnets: "{{ public_subnets }}"
+        wait: yes
