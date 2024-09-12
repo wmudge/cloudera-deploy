@@ -83,10 +83,6 @@
           <td>{{ name_prefix }}</td>
         </tr>
         <tr>
-          <th>Domain</th>
-          <td>{{ domain }}</td>
-        </tr>
-        <tr>
           <th>Realm</thd>
           <td>{{ realm }}</td>
         </tr>
@@ -96,16 +92,6 @@
         </tr>
       </tbody>
     </table>
-    <h2>Deployment Access</h2>
-    <p>Enable the SSH tunnel to the deployment:</p>
-    <pre>
-  ssh -D 8157 -qCN {{ groups['jump_host'] | map('extract', hostvars, 'ansible_user') | first }}@{{ groups['jump_host'] | map('extract', hostvars, 'ansible_host') | first }}
-      </pre>
-    <p>Use a SOCKS5 proxy switcher in your browser to access the deployment endpoints. (An example is the
-      <i>SwitchyOmega</i> extension for Chrome-based browsers.)</p>
-    <p>In the proxy configuration, set <i>Protocol</i> to <b>SOCKS5</b>, <i>Server</i> to <b>localhost</b>, and
-      <i>Port</i> to <b>8157</b>. Ensure the SOCKS5 proxy is active when clicking on the CDP Private Cloud Base UIs and
-      endpoints that you wish to access.</p>
     <h2>SSL Certificate Installation</h2>
     <p>Any SSL-enabled endpoint within the cluster will produce a SSL warning for the self-signed certificate issued by
       the deployment's local FreeIPA server. If you wish to avoid this warning, install the CA certificate, <b>{{
