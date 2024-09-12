@@ -162,6 +162,7 @@ resource "aws_vpc_security_group_ingress_rule" "pvc_base" {
   description                  = "Self-reference ingress rule"
   ip_protocol                  = -1
   referenced_security_group_id = aws_security_group.pvc_base.id
+  tags                         = { Name = "${var.prefix}-pvc-base-intra" }
 }
 
 resource "aws_vpc_security_group_egress_rule" "pvc_base" {
@@ -169,6 +170,7 @@ resource "aws_vpc_security_group_egress_rule" "pvc_base" {
   description                  = "Self-reference egress rule"
   ip_protocol                  = -1
   referenced_security_group_id = aws_security_group.pvc_base.id
+  tags                         = { Name = "${var.prefix}-pvc-base-intra" }
 }
 
 # ACME Directory Challenge
