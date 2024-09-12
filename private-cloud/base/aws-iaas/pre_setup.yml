@@ -14,6 +14,12 @@
 
 ---
 
+# test06-gateway.3-10-18-234.pvc.cloudera-labs.com
+# test06-freeipa.67-99-7-45.pvc.cloudera-labs.com
+# test06-worker-01.cldr.deployment
+# test06-worker-02.cldr.deployment
+# test06-master-01.cldr.deployment
+
 - name: Provision AWS infrastructure
   hosts: localhost
   connection: local
@@ -138,6 +144,18 @@
         name: dnsmasq_server
       vars:
         dnsmasq_upstream_nameservers: ["{{ vpc_cidr | ansible.utils.ipmath(2) }}"]
+        dnsmasq_realm: "{{ freeipa.realm | lower }}"
+        dnsmasq_ldap_servers: "{{ groups['freeipa'] }}"
+        dnsmasq_kerberos_servers: "{{ groups['freeipa'] }}"
+
+    # Add dns-rr records for URI records for KRB KDC discovery
+    # https://sigmaris.info/blog/2018/04/encoding-dns-uri-records-for-dnsmasq/
+    # dns-rr=_kerberos.cldr.deployment,256,000a00016b7262357372763a6d3a7463703a7465737430362d667265656970612d30312e31382d3139312d3132382d3234362e7076632e636c6f75646572612d6c6162732e636f6d2e
+    # dns-rr=_kerberos.cldr.deployment,256,000a00016b7262357372763a6d3a7564703a7465737430362d667265656970612d30312e31382d3139312d3132382d3234362e7076632e636c6f75646572612d6c6162732e636f6d2e
+    # dns-rr=_kpasswd.cldr.deployment,256,000a00016b7262357372763a6d3a7463703a7465737430362d667265656970612d30312e31382d3139312d3132382d3234362e7076632e636c6f75646572612d6c6162732e636f6d2e
+    # dns-rr=_kpasswd.cldr.deployment,256,000a00016b7262357372763a6d3a7564703a7465737430362d
+    # 667265656970612d30312e31382d3139312d3132382d3234362e7076632e636c6f75646572612d6c616273
+    # 2e636f6d2e
 
 - name: Establish DNS resolution to dnsmasq server
   hosts: all:!dnsmasq
@@ -170,6 +188,13 @@
     - freeipa_server
   vars:
     vpc_cidr: "{{ lookup('cloud.terraform.tf_output', 'vpc', project_path='tf_cluster')['cidr_block'] }}"
+    le_certs:
+      - "isrgrootx1.pem"
+      - "isrg-root-x2.pem"
+      - "lets-encrypt-r3.pem"
+      - "lets-encrypt-e1.pem"
+      - "lets-encrypt-r4.pem"
+      - "lets-encrypt-e2.pem"
   tasks:
     - name: Install base FreeIPA server packages
       ansible.builtin.package:
@@ -188,16 +213,119 @@
         ipaserver_install_packages: no
         ipaserver_hostname: "{{ inventory_hostname }}"
         ipaserver_realm: "{{ freeipa.realm }}"
-        ipaserver_domain: "{{ freeipa.realm }}"
+        ipaserver_domain: "{{ freeipa.realm | lower }}"
         ipaserver_no_host_dns: yes
         ipaserver_setup_firewalld: no
         ipaserver_setup_dns: no
-        ipaserver_copy_csr_to_controller: yes
+        #ipaserver_copy_csr_to_controller: yes
         ipaserver_ca_subject: "CN=CLDR-{{ name_prefix }}-RootCA,O={{ freeipa.realm }}"
         ipaclient_servers: ["{{ inventory_hostname }}"]
         ipaclient_mkhomedir: yes
         ipadm_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
         ipaadmin_password: "{{ freeipa.ipaadmin_password | default(lookup('env', 'IPA_PASSWORD', default='Undefined')) }}"
+    
+    - name: Import the EPEL GPG key
+      ansible.builtin.rpm_key:
+        key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}"
+      register: gpg_install
+      until: gpg_install is succeeded
+      retries: 5
+      delay: 10
+
+    - name: Enable the EPEL repository
+      ansible.builtin.yum:
+        name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+      register: repo_install
+      until: repo_install is succeeded
+      retries: 5
+      delay: 10
+      
+    - name: Install snap
+      ansible.builtin.package:
+        name: snapd
+
+    - name: Enable the snapd daemon
+      ansible.builtin.service:
+        name: snapd.socket
+        enabled: yes
+        state: started
+
+    - name: Create the snap 'classic' symlink
+      ansible.builtin.file:
+        src: /var/lib/snapd/snap
+        dest: /snap
+        state: link
+      register: __snap_classic
+    
+    - name: Reboot the server to set up the snap paths
+      when: __snap_classic.changed
+      ansible.builtin.reboot:
+    
+    - name: Install certbot (via command)
+      ansible.builtin.command: 
+        cmd: snap install certbot --classic
+        creates: /snap/bin/certbot
+
+    # - name: Create the certbot symlink
+    #   ansible.builtin.file:
+    #     src: /snap/bin/certbot
+    #     dest: /usr/bin/certbot
+    #     state: link
+    
+    - name: Set up the SSL directory
+      ansible.builtin.file:
+        path: "/etc/ssl/{{ inventory_hostname }}"
+        state: directory
+
+    - name: Download the Lets Encrypt root certificates
+      ansible.builtin.get_url:
+        dest: "/etc/ssl/{{ inventory_hostname }}"
+        url: "{{ le_cert_url }}"
+      loop: "{{ ['https://letsencrypt.org/certs/'] | product(le_certs) | map('join') | list }}"
+      loop_control:
+        loop_var: le_cert_url
+      register: __le_certs
+
+    - debug:
+        var: __le_certs
+
+    - name: Install the Lets Encrypt root certificates in the FreeIPA CA
+      when: not __le_certs.results | rejectattr('changed') | list
+      ansible.builtin.command:
+        argv:
+          - ipa-cacert-manage
+          - install
+          - "{{ le_cert }}"
+      loop: "{{ __le_certs.results | map(attribute='dest') | list }}"
+      loop_control:
+        loop_var: le_cert
+
+    - name: Update the FreeIPA CA system
+      when: not __le_certs.results | rejectattr('changed') | list
+      ansible.builtin.command: ipa-certupdate
+
+    - name: Install the Lets Encrypt certificate renewal script
+      ansible.builtin.template:
+        dest: /root/renew-le.sh
+        src: renew-le.sh.j2
+        mode: "0755"
+
+    - name: Install the Lets Encrypt certificate signing request configuration
+      ansible.builtin.template:
+        dest: /root/ipa-httpd.cnf
+        src: ipa-httpd.cnf.j2
+        mode: "0644"
+
+    - name: Set up a daily cron job to check the Lets Encrypt certificate
+      ansible.builtin.cron:
+        name: letsencrypt renewal
+        hour: "2"
+        user: root
+        job: /root/renew-le.sh
+        cron_file: letsencrypt_renewal
+
+    - name: Run the Lets Encrypt certificate renewal script
+      ansible.builtin.command: /root/renew-le.sh --first-time
 
 - name: Register all hosts with local FreeIPA server
   hosts: all:!freeipa
@@ -215,7 +343,7 @@
       ipaclient_hostname: "{{ inventory_hostname }}"
       ipaclient_servers: "{{ groups['freeipa'] }}"
       ipaclient_mkhomedir: yes
-      ipaserver_domain: "{{ freeipa.realm }}"
+      ipaserver_domain: "{{ freeipa.realm | lower }}"
       ipaserver_realm: "{{ freeipa.realm }}"
       ipaserver_setup_dns: no
       ipaadmin_principal: "{{ freeipa.ipaadmin_user | default(lookup('ansible.builtin.env', 'IPA_USER', default=omit)) }}"
