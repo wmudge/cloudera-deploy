@@ -19,20 +19,26 @@ region              = "{{ infra_region }}"
 {% if ingress_cidr is defined and ingress_cidr is iterable %}
 vpc_ingress_cidr    = [
 {%- set sep = joiner(",") %}
-{%   for c in ingress_cidr %}{{ sep() }}
+{% for c in ingress_cidr %}{{ sep() }}
   "{{ c }}"
-{% endfor %}
+{%- endfor %}
+
 ]
-{% endif %}
 
+{% endif %}
 {% if domain is defined %}
-domain              = "{{ domain }}"
-{% endif %}
+public_domain              = "{{ domain }}"
 
+{% endif %}
+{% if internal_domain is defined %}
+private_domain              = "{{ internal_domain }}"
+
+{% endif %}
 {% if asset_tags is defined and asset_tags is mapping %}
 asset_tags = {
 {%   for k, v in asset_tags.items() %}
   {{ k }} = "{{ v }}"
 {%   endfor %}
 }
+
 {% endif %}

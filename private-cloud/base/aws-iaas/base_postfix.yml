@@ -16,31 +16,44 @@
 
 # TODO on Knox Gateway
 # Install snapd and then certbot, following standard procedures
-# Rework the renewal and CSR config to better with the proxy needs
+  # DONE - Create as a role to install
+  # DONE - Run certbot the first time
+# DONE - Rework the renewal and CSR config to better with the proxy needs
 # Create a PCKS12 keystore using the resulting cert -- cert identity should be 'gateway-identity'
 #   and store passcode the Master Key for Knox (for now)
 #   Should also store it as knox:knox 0644 in /var/lib/knox/gateway/data/security/keystores/
+  # SKIP - Create a new role destined for cloudera.exe
+  # Add procedure to update existing keystore
 # Update CM for the keystore (and potentially passcode)
-# PUT /api/v31/clusters/PVC-Base/services/knox/roleConfigGroups/knox-KNOX_GATEWAY-BASE/config
-# {
-#   "items": [
-#     {
-#       "name": "ssl_server_keystore_location",
-#       "value": ""
-#     }
-#   ]
-# }
+  # PUT /api/v31/clusters/PVC-Base/services/knox/roleConfigGroups/knox-KNOX_GATEWAY-BASE/config
+  # {
+  #   "items": [
+  #     {
+  #       "name": "ssl_server_keystore_location",
+  #       "value": ""
+  #     }
+  #   ]
+  # }
 # Update Knox for the service whitelist due to the embedded IP (note that the domain is configurable)
-# PUT /api/v31/clusters/PVC-Base/services/knox/roleConfigGroups/knox-KNOX_GATEWAY-BASE/config
-# {
-#   "items": [
-#     {
-#       "name": "gateway_dispatch_whitelist",
-#       "value": "^\\/.*$;^https?:\\/\\/(.+\\.pvc\\.cloudera-labs\\.com):[0-9]+\\/?.*$"
-#     }
-#   ]
-# }
-
+  # PUT /api/v31/clusters/PVC-Base/services/knox/roleConfigGroups/knox-KNOX_GATEWAY-BASE/config
+  # {
+  #   "items": [
+  #     {
+  #       "name": "gateway_dispatch_whitelist",
+  #       "value": "^\\/.*$;^https?:\\/\\/(.+\\.pvc\\.cloudera-labs\\.com):[0-9]+\\/?.*$"
+  #     }
+  #   ]
+  # }
+# Update the frontend_url for the CM config
+  # PUT /api/v31/cm/config
+  # {
+  #   "items": [
+  #     {
+  #       "name": "frontend_url",
+  #       "value": "scheme://host:port only"
+  #     }
+  #   ]
+  # }
 
 - name: Postfix CDP Private Cloud clusters
   hosts: localhost
@@ -78,3 +91,45 @@
 
 - name: Postfix clusters for CDP Private Cloud
   ansible.builtin.import_playbook: cloudera.exe.pvc_base_postfix.yml
+
+- name: Enable Lets Encrypt for Knox Gateway
+  hosts: knox_gateway
+  gather_facts: no
+  become: yes
+  roles:
+    - name: cloudera.cluster.infrastructure.ca_common
+  tags:
+    - certbot
+  vars:
+    base_dir_security_le: "{{ base_dir_security }}/letsencrypt"
+  tasks:
+    - name: Set up the Lets Encrypt directory
+      ansible.builtin.file:
+        path: "{{ base_dir_security_le }}"
+        state: directory
+        mode: "0700"
+      
+    - name: Install the Lets Encrypt certificate renewal script
+      ansible.builtin.template:
+        dest: "{{ base_dir_security_le }}/knox-renew-tls.sh"
+        src: knox-renew-tls.sh.j2
+        mode: "0755"
+
+    - name: Install the Lets Encrypt certificate signing request configuration
+      ansible.builtin.template:
+        dest: "{{ base_dir_security_le }}/knox.cnf"
+        src: knox.cnf.j2
+        mode: "0644"
+
+    - name: Set up a daily cron job to check the Lets Encrypt certificate
+      ansible.builtin.cron:
+        name: letsencrypt renewal
+        hour: "2"
+        user: root
+        job: "{{ base_dir_security_le }}/knox-renew-tls.sh"
+        cron_file: letsencrypt_renewal
+
+    - name: Run the Lets Encrypt certificate renewal script
+      ansible.builtin.command: "{{ base_dir_security_le }}/knox-renew-tls.sh --first-time"
+
+    

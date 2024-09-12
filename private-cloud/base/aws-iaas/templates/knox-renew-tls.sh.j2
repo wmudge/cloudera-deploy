@@ -1,0 +1,47 @@
+#!/usr/bin/bash
+set -o nounset -o errexit
+
+WORKDIR=$(dirname "$(realpath $0)")
+EMAIL="{{ contact_email }}"
+
+### cron
+# skip renewal if the cert is still valid for more than 30 days
+# comment out this line for the first run
+if [ "${1:-renew}" != "--first-time" ]
+then
+	end_timestamp=`date +%s --date="$(openssl x509 -enddate -noout -in {{ base_dir_security_pki }}/knox_gateway.crt | cut -d= -f2)"`
+	now_timestamp=`date +%s`
+	let diff=($end_timestamp-$now_timestamp)/86400
+	if [ "$diff" -gt "30" ]; then
+		exit 0
+	fi
+fi
+cd "$WORKDIR"
+# cert renewal is needed if we reached this line
+
+# cleanup
+rm -f "$WORKDIR"/*.pem
+rm -f "$WORKDIR"/knox_gateway-csr.*
+
+# generate CSR
+OPENSSL_PASSWD_FILE="{{ tls_key_password_file }}"
+[ -f "$OPENSSL_PASSWD_FILE" ] && OPENSSL_EXTRA_ARGS="-passin file:$OPENSSL_PASSWD_FILE" || OPENSSL_EXTRA_ARGS=""
+openssl req -new -sha256 -config "$WORKDIR/knox.cnf" -key {{ tls_key_path }} -out "$WORKDIR/knox_gateway-csr.der" $OPENSSL_EXTRA_ARGS
+
+# get a new cert
+certbot certonly --non-interactive --standalone --csr "$WORKDIR/knox_gateway-csr.der" --email "$EMAIL" --agree-tos
+
+# replace the cert
+[ -f {{ base_dir_security_pki }}/knox_gateway.crt ] && cp {{ base_dir_security_pki }}/knox_gateway.crt {{ base_dir_security_pki }}/knox_gateway.crt.$(date +%F) || echo "New certificate!"
+mv -f "$WORKDIR/0000_cert.pem" {{ base_dir_security_pki }}/knox_gateway.crt
+restorecon -v {{ base_dir_security_pki }}/knox_gateway.crt
+
+# replace the cert in the Knox JKS
+GATEWAY_JKS_FILE="/var/lib/knox/gateway/data/security/keystores/gateway.jks"
+KNOX_JKS_FILE="/var/lib/knox/gateway/data/security/keystores/letsencrypt.jks"
+
+cp "$GATEWAY_JKS_FILE" "$WORKDIR/letsencrypt.jks"
+keytool -importcert -alias "foo-test" -file "{{ base_dir_security_pki }}/knox_gateway.crt" -keystore "$WORKDIR/letsencrypt.jks" -storepass $(cat {{ tls_key_password_file }}) -trustcacerts
+cp "$WORKDIR/letsencrypt.jks" "$KNOX_JKS_FILE"
+
+
